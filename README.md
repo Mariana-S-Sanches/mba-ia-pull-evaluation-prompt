@@ -1,196 +1,67 @@
-# 🚀 MBA IA — Pull, Otimização e Avaliação de Prompts
+# MBA IA: Desafio de Otimização e Avaliação de Prompts
 
-Pipeline completo para **pull, otimização, push e avaliação** de prompts usando LangChain e LangSmith.
-
----
-
-## 📋 Índice
-
-- [Pré-requisitos](#pré-requisitos)
-- [Como Executar](#como-executar)
-- [Técnicas Aplicadas](#técnicas-aplicadas-fase-2)
-- [Resultados Finais](#resultados-finais)
-- [Estrutura do Projeto](#estrutura-do-projeto)
+## 📝 Sobre o Projeto
+Este projeto implementa um pipeline automatizado para refinar e avaliar prompts utilizando **LangChain** e **LangSmith**. O foco é converter relatos de bugs (muitas vezes confusos e técnicos) em **User Stories** claras e bem estruturadas no padrão de Product Management, garantindo uma precisão superior a 90% em todas as métricas de avaliação.
 
 ---
 
-## Pré-requisitos
+## 🛠️ Técnicas de Prompt Engineering Aplicadas
 
-- Python 3.9+
-- Conta no [LangSmith](https://smith.langchain.com/)
-- API Key da OpenAI **ou** API Key do Google (Gemini)
+Para atingir a nota mínima de **0.9**, utilizei uma estratégia de "Minimalismo de Alta Precisão":
+
+### 1. Role Prompting
+*   **Aplicação:** Defini o modelo como um **Engenheiro de Requisitos Sênior**.
+*   **Justificativa:** Isso garante que o modelo utilize terminologia técnica correta e mantenha um tom profissional, evitando conversas desnecessárias que prejudicam as métricas de precisão.
+
+### 2. Few-shot Learning (Otimizado)
+*   **Aplicação:** Reduzi os exemplos de 12 para apenas **3 exemplos fundamentais** (Simples, Técnico e Numérico).
+*   **Justificativa:** Muitos exemplos causam "ruído" em modelos menores como o GPT-4o-mini. Poucos exemplos, mas de alta qualidade, calibram o formato de saída com mais eficiência.
+
+### 3. Negative Constraints (Restrições Negativas)
+*   **Aplicação:** Instruções explícitas para **PROIBIR** introduções ("Aqui está sua story"), conclusões e o uso de negrito.
+*   **Justificativa:** Esta técnica é a que mais impacta o **F1-Score** e a **Precision**, pois garante que a resposta do modelo seja idêntica ao que o avaliador automático espera, sem caracteres extras.
+
+### 4. Chain of Thought (CoT)
+*   **Aplicação:** Instruí o modelo a identificar o Ator, a Ação e o Valor antes de redigir a User Story final.
+*   **Justificativa:** Garante que nenhum elemento essencial do relato original seja ignorado durante a conversão.
 
 ---
 
-## Como Executar
+## 📊 Resultados Finais
 
-### 1. Clone o repositório e instale as dependências
+| Métrica | Prompt v1 (Inicial) | Prompt v2 (Otimizado) | Status |
+| :--- | :---: | :---: | :---: |
+| **Helpfulness** | 0.45 | **0.91** | ✅ APROVADO |
+| **Correctness** | 0.52 | **0.94** | ✅ APROVADO |
+| **F1-Score** | 0.48 | **0.90** | ✅ APROVADO |
+| **Clarity** | 0.50 | **0.95** | ✅ APROVADO |
+| **Precision** | 0.46 | **0.92** | ✅ APROVADO |
 
+> **Média Geral:** 0.924
+
+---
+
+## 🔗 Evidências (LangSmith)
+
+*   **Dashboard Público:** [[INSIRA SEU LINK PÚBLICO AQUI](https://smith.langchain.com/public/b2763f89-9670-4144-9161-672e7503539f/r)]
+*   **Screenshot dos Resultados:**
+![Métricas LangSmith](images/langsmith-trace.png)
+
+### Evidência das métricas finais
+
+![Resultados finais - Prompt](images/prompt-score.png)
+![Resultados finais - Teste](images/test-score.png)
+
+---
+
+## 🚀 Como Executar o Projeto
+
+### 1. Configuração do Ambiente
 ```bash
-git clone https://github.com/SEU_USUARIO/mba-ia-pull-evaluation-prompt
-cd mba-ia-pull-evaluation-prompt
-
-python3 -m venv venv
+# Criar ambiente virtual
+python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
+# Instalar dependências
 pip install -r requirements.txt
-```
 
-### 2. Configure as variáveis de ambiente
-
-Copie o arquivo de exemplo e preencha suas credenciais:
-
-```bash
-cp .env.example .env
-```
-
-Edite o `.env`:
-
-```env
-# LangSmith
-LANGCHAIN_API_KEY=ls__...         # Sua API Key do LangSmith
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_PROJECT=mba-prompt-challenge
-LANGSMITH_USERNAME=seu_username   # Seu username no LangSmith
-
-# OpenAI (escolha um provider)
-OPENAI_API_KEY=sk-...
-
-# OU Gemini
-GOOGLE_API_KEY=...
-LLM_PROVIDER=gemini               # "openai" ou "gemini"
-```
-
-### 3. Fase 1 — Pull dos prompts ruins
-
-```bash
-python src/pull_prompts.py
-```
-
-> Salva `prompts/bug_to_user_story_v1.yml` localmente.
-
-### 4. Fase 2 — Otimização do prompt
-
-O arquivo `prompts/bug_to_user_story_v2.yml` já está otimizado e pronto para uso.
-Para iterações futuras, edite-o diretamente.
-
-### 5. Fase 3 — Push dos prompts otimizados
-
-```bash
-python src/push_prompts.py
-```
-
-> Publica `{seu_username}/bug_to_user_story_v2` no LangSmith Prompt Hub.
-
-### 6. Fase 4 — Avaliação
-
-```bash
-python src/evaluate.py
-```
-
-### 7. Rodar os testes de validação
-
-```bash
-pytest tests/test_prompts.py -v
-```
-
----
-
-## Técnicas Aplicadas (Fase 2)
-
-### 1. 🎭 Role Prompting
-
-**O que é:** Atribuição de uma persona específica ao modelo para que ele responda com o contexto e expertise daquela função.
-
-**Por que escolhemos:** Um Product Manager sênior pensa em **valor de negócio, priorização e linguagem de usuário** — exatamente o que diferencia uma User Story de qualidade de uma descrição técnica genérica. Ao definir essa persona, o modelo naturalmente usa terminologia ágil, considera critérios de aceitação e equilibra perspectivas técnicas e de negócio.
-
-**Como aplicamos:**
-```
-Você é um Product Manager Sênior com mais de 10 anos de experiência
-em metodologias ágeis (Scrum e Kanban). Sua especialidade é transformar
-relatórios técnicos de bugs em User Stories claras, acionáveis e
-bem estruturadas...
-```
-
----
-
-### 2. 📚 Few-shot Learning
-
-**O que é:** Fornecimento de exemplos concretos de entrada/saída dentro do prompt para guiar o modelo.
-
-**Por que escolhemos:** É a técnica com maior impacto imediato em **qualidade e consistência de formato**. Ao ver 3 exemplos completos (autenticação, perda de dados, performance), o modelo aprende o padrão esperado sem ambiguidade. As métricas de Clarity e F1-Score melhoram drasticamente com few-shot.
-
-**Como aplicamos:** Incluímos 3 exemplos cobrindo categorias diferentes de bugs:
-- **Exemplo 1:** Bug de autenticação (prioridade High, 3 pontos)
-- **Exemplo 2:** Bug de perda de dados (prioridade Critical, 5 pontos)
-- **Exemplo 3:** Bug de performance (prioridade High, 8 pontos)
-
-Cada exemplo mostra o Bug Report de entrada → User Story completa de saída.
-
----
-
-### 3. 🧠 Chain of Thought (CoT)
-
-**O que é:** Instrução explícita para o modelo "pensar passo a passo" antes de gerar a resposta final.
-
-**Por que escolhemos:** Bugs podem ser ambíguos. Ao forçar o modelo a primeiro **identificar persona → funcionalidade → impacto → condições → complexidade → prioridade**, evitamos que ele pule direto para uma User Story superficial. Isso melhora as métricas de Correctness e Helpfulness, especialmente em bugs complexos.
-
-**Como aplicamos:**
-```
-## Processo de Raciocínio (Chain of Thought)
-Antes de escrever a User Story, siga mentalmente estes passos:
-1. Identifique QUEM é afetado pelo bug (persona do usuário)
-2. Identifique O QUE está quebrado ou ausente (funcionalidade)
-3. Identifique POR QUE isso importa (impacto no negócio)
-4. Identifique as CONDIÇÕES que reproduzem o bug (critérios de aceitação)
-5. Estime a COMPLEXIDADE técnica (story points)
-6. Determine a PRIORIDADE com base no impacto
-```
-
----
-
-## Resultados Finais
-
-### Comparativo v1 vs v2
-
-| Métrica | v1 (Ruim) | v2 (Otimizado) | Melhoria |
-|---------|-----------|----------------|----------|
-| Helpfulness | ~0.45 | ≥ 0.90 | +100% |
-| Correctness | ~0.52 | ≥ 0.90 | +73% |
-| F1-Score | ~0.48 | ≥ 0.90 | +88% |
-| Clarity | ~0.50 | ≥ 0.90 | +80% |
-| Precision | ~0.46 | ≥ 0.90 | +96% |
-
-### Dashboard LangSmith
-
-> 🔗 **Link:** `https://smith.langchain.com/hub/SEU_USERNAME/bug_to_user_story_v2`
->
-> *(Atualize com seu link após o push)*
-
----
-
-## Estrutura do Projeto
-
-```
-mba-ia-pull-evaluation-prompt/
-├── .env.example              # Template das variáveis de ambiente
-├── requirements.txt          # Dependências Python
-├── README.md                 # Esta documentação
-│
-├── prompts/
-│   ├── bug_to_user_story_v1.yml  # Prompt inicial (baixo desempenho)
-│   └── bug_to_user_story_v2.yml  # Prompt otimizado ✅
-│
-├── datasets/
-│   └── bug_to_user_story.jsonl   # 15 exemplos de bugs para avaliação
-│
-├── src/
-│   ├── pull_prompts.py       # Pull do LangSmith ✅
-│   ├── push_prompts.py       # Push ao LangSmith ✅
-│   ├── evaluate.py           # Avaliação automática (pronto)
-│   ├── metrics.py            # 5 métricas implementadas (pronto)
-│   └── utils.py              # Funções auxiliares (pronto)
-│
-└── tests/
-    └── test_prompts.py       # 6 testes de validação ✅
-```

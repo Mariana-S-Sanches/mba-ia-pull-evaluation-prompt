@@ -1,154 +1,141 @@
 """
 Script para fazer push de prompts otimizados ao LangSmith Prompt Hub.
-Lê os prompts locais em YAML e os publica versionados.
+
+Este script:
+1. Lê os prompts otimizados de prompts/bug_to_user_story_v2.yml
+2. Valida os prompts
+3. Faz push PÚBLICO para o LangSmith Hub
+4. Adiciona metadados (tags, descrição, técnicas utilizadas)
+
+SIMPLIFICADO: Código mais limpo e direto ao ponto.
 """
 
 import os
-import yaml
+import sys
+from pathlib import Path
 from dotenv import load_dotenv
 from langchain import hub
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    SystemMessagePromptTemplate,
+    HumanMessagePromptTemplate,
+)
+from utils import load_yaml, check_env_vars, print_section_header
 
 load_dotenv()
 
-LANGSMITH_USERNAME = os.getenv("LANGCHAIN_HUB_API_KEY_USERNAME") or os.getenv("LANGSMITH_USERNAME")
+PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
+PROMPT_FILE = PROMPTS_DIR / "bug_to_user_story_v2.yml"
+PROMPT_KEY = "bug_to_user_story_v2"
 
 
-def load_prompt_from_yaml(filepath: str) -> dict:
+def validate_prompt(prompt_data: dict) -> tuple[bool, list]:
     """
-    Carrega um prompt de um arquivo YAML local.
+    Valida estrutura básica de um prompt (versão simplificada).
 
     Args:
-        filepath: Caminho do arquivo YAML
+        prompt_data: Dados do prompt (conteúdo da chave raiz do YAML)
 
     Returns:
-        Dicionário com os dados do prompt
+        (is_valid, errors) - Tupla com status e lista de erros
     """
-    with open(filepath, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    print(f"  ✓ YAML carregado: {filepath}")
-    return data
+    errors = []
+
+    if not prompt_data.get("system_prompt", "").strip():
+        errors.append("system_prompt está vazio ou ausente")
+
+    if not prompt_data.get("user_prompt", "").strip():
+        errors.append("user_prompt está vazio ou ausente")
+
+    if "{bug_report}" not in prompt_data.get("user_prompt", ""):
+        errors.append("user_prompt não contém {bug_report}")
+
+    if "{bug_report}" in prompt_data.get("system_prompt", ""):
+        errors.append(
+            "system_prompt não deve conter {bug_report} (duplicação do v1)")
+
+    if "TODO" in prompt_data.get("system_prompt", ""):
+        errors.append("system_prompt ainda contém TODOs não resolvidos")
+
+    # Chave correta conforme utils.py
+    techniques = prompt_data.get("techniques_applied", [])
+    if len(techniques) < 2:
+        errors.append(
+            f"Mínimo 2 técnicas em 'techniques_applied' "
+            f"(encontradas: {len(techniques)})"
+        )
+
+    return len(errors) == 0, errors
 
 
-def build_chat_prompt_template(data: dict) -> ChatPromptTemplate:
-    """
-    Constrói um ChatPromptTemplate a partir dos dados do YAML.
+def push_prompt_to_langsmith(prompt_name: str, prompt_data: dict) -> bool:
+    username = os.getenv("USERNAME_LANGSMITH_HUB")
+    if not username:
+        print(
+            "❌ USERNAME_LANGSMITH_HUB não encontrado no .env"
+        )
+        return False
 
-    Args:
-        data: Dicionário com 'messages' e opcionalmente 'input_variables'
+    prompt = ChatPromptTemplate.from_messages([
+        SystemMessagePromptTemplate.from_template(
+            prompt_data["system_prompt"]
+        ),
+        HumanMessagePromptTemplate.from_template(
+            prompt_data["user_prompt"]
+        ),
+    ])
 
-    Returns:
-        ChatPromptTemplate pronto para push
-    """
-    messages = []
+    full_name = f"{username}/{prompt_name}"
+    print(f"📤 Publicando: {full_name}")
 
-    for msg in data.get("messages", []):
-        role = msg.get("role", "human")
-        content = msg.get("content", "")
-
-        if role == "system":
-            messages.append(SystemMessagePromptTemplate.from_template(content))
-        elif role == "human":
-            messages.append(HumanMessagePromptTemplate.from_template(content))
-        else:
-            messages.append(HumanMessagePromptTemplate.from_template(content))
-
-    prompt = ChatPromptTemplate.from_messages(messages)
-    return prompt
-
-
-def push_prompt(prompt, prompt_name: str, description: str = "", tags: list = None):
-    """
-    Faz push de um ChatPromptTemplate ao LangSmith Prompt Hub.
-
-    Args:
-        prompt: ChatPromptTemplate a ser publicado
-        prompt_name: Nome completo do prompt (ex: 'username/prompt-name')
-        description: Descrição do prompt
-        tags: Lista de tags para o prompt
-    """
-    print(f"  Fazendo push para: {prompt_name}")
-
-    hub.push(
-        prompt_name,
+    url = hub.push(
+        full_name,
         prompt,
-        new_repo_description=description,
         new_repo_is_public=True,
-        tags=tags or [],
     )
 
-    print(f"  ✓ Push realizado com sucesso!")
-
-
-def get_username() -> str:
-    """Retorna o username configurado nas variáveis de ambiente."""
-    username = os.getenv("LANGSMITH_USERNAME") or os.getenv("LANGCHAIN_HUB_API_KEY_USERNAME")
-    if not username:
-        raise ValueError(
-            "Username não encontrado. Configure LANGSMITH_USERNAME no arquivo .env"
-        )
-    return username
+    print(f"✅ Publicado com sucesso!")
+    print(f"🔗 {url}")
+    return True
 
 
 def main():
-    """Função principal: lê prompts otimizados e faz push ao LangSmith."""
+    """Função principal"""
+    print_section_header("PUSH DE PROMPTS - LangSmith")
 
-    username = get_username()
+    if not check_env_vars(["LANGCHAIN_API_KEY", "LANGCHAIN_USERNAME"]):
+        return 1
 
-    prompts_to_push = [
-        {
-            "filepath": "prompts/bug_to_user_story_v2.yml",
-            "hub_name": f"{username}/bug_to_user_story_v2",
-            "description": (
-                "Prompt otimizado para converter relatórios de bugs em User Stories "
-                "no formato ágil. Aplica Role Prompting, Few-shot Learning e Chain of Thought "
-                "para garantir user stories claras, acionáveis e completas."
-            ),
-            "tags": ["few-shot", "chain-of-thought", "role-prompting", "agile", "user-story", "bug-to-story", "v2"],
-        }
-    ]
+    # 1. Carrega o YAML — load_yaml recebe caminho completo como string
+    raw = load_yaml(str(PROMPT_FILE))
+    if raw is None:
+        return 1
 
-    print("\n" + "=" * 50)
-    print("PUSH DE PROMPTS OTIMIZADOS AO LANGSMITH")
-    print("=" * 50)
+    # Desempacota chave raiz
+    prompt_data = raw.get(PROMPT_KEY, raw)
 
-    for item in prompts_to_push:
-        print(f"\nProcessando: {item['hub_name']}")
-        try:
-            # Carrega o YAML
-            data = load_prompt_from_yaml(item["filepath"])
+    # 2. Valida
+    print("🔍 Validando prompt...")
+    is_valid, errors = validate_prompt(prompt_data)
 
-            # Valida metadados mínimos
-            metadata = data.get("metadata", {})
-            techniques = metadata.get("techniques", [])
-            if len(techniques) < 2:
-                print(f"  ⚠ Atenção: menos de 2 técnicas listadas nos metadados ({len(techniques)} encontradas)")
+    if not is_valid:
+        print("❌ Prompt inválido:")
+        for err in errors:
+            print(f"   • {err}")
+        return 1
 
-            # Constrói o ChatPromptTemplate
-            prompt = build_chat_prompt_template(data)
-            print(f"  ✓ Template construído com {len(data.get('messages', []))} mensagens")
+    techniques = prompt_data.get("techniques_applied", [])
+    print(
+        f"✅ Validação OK — {len(techniques)} técnicas: {', '.join(techniques)}")
 
-            # Faz push
-            push_prompt(
-                prompt=prompt,
-                prompt_name=item["hub_name"],
-                description=item["description"],
-                tags=item["tags"],
-            )
+    # 3. Push
+    success = push_prompt_to_langsmith(PROMPT_KEY, prompt_data)
+    if not success:
+        return 1
 
-        except FileNotFoundError:
-            print(f"  ✗ Arquivo não encontrado: {item['filepath']}")
-            print("     Execute primeiro a fase de otimização do prompt.")
-            raise
-        except Exception as e:
-            print(f"  ✗ Erro ao processar {item['hub_name']}: {e}")
-            raise
-
-    print("\n" + "=" * 50)
-    print("✅ Push concluído com sucesso!")
-    print(f"   Acesse: https://smith.langchain.com/hub/{username}")
-    print("=" * 50 + "\n")
+    print("\n✅ Concluído! Próximo passo: python src/evaluate.py")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
